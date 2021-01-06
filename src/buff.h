@@ -1,10 +1,10 @@
 ﻿#pragma once
-#include <queue>
-#include <fstream>
-#include <memory>
-#include <functional>
-#include <mutex>
 #include <atomic>
+#include <fstream>
+#include <functional>
+#include <memory>
+#include <mutex>
+#include <queue>
 #include <unordered_map>
 
 /*
@@ -14,54 +14,68 @@
 */
 
 typedef std::shared_ptr<char> dataRef;
+typedef std::unique_ptr<std::mutex> mutexRef;
 typedef const std::string CS;
+
+template <typename T>
+std::shared_ptr<T> make_shared_array(size_t size) {
+return std::shared_ptr<T>(new T[size], std::default_delete<T[]>());
+}
+
 class ReadBuff
 {
 public:
-    ReadBuff(CS& readPath, CS& writePath, const std::streamsize cap, const size_t poolCnt, const size_t batchsize = 512);
+    ReadBuff(CS &readPath,
+        CS &writePath,
+        const std::streamsize cap,
+        const size_t poolCnt,
+        const size_t batchsize);
     ~ReadBuff();
-    bool is_open() const;
-    bool is_readfinish() const;
-    bool is_writefinish() const;
-    std::streamsize readfile(std::string& state, const std::streamsize len);
-    std::streamsize writefile(std::string& state);
-    dataRef getNextBuff(std::string& state);
-    bool writebuff(dataRef buf, std::string& state);
+    bool is_open() const { return m_readFs.is_open(); }
+
+    bool is_readFileFinish() const { return m_readFileFinish.load(); }
+
+    bool is_writeFileFinish() const { return m_writeFileFinish; }
+
+    bool is_readBuffFinish() const { return m_readBuffFinish.load(); }
+
+    bool is_writeBuffFinish() const { return m_writeBuffFinish.load(); }
+
+    std::streamsize readfileToBuff(std::string &state, const std::streamsize len);
+    std::streamsize writeFileFromBuff(std::string &state);
+    std::pair<dataRef, int> getNextBuff(std::string &state);
+    bool writebuff(dataRef buf, std::string &state, int writeQueueIndex, int dataIndex);
 
 private:
     // read file path and write file path
-
     std::size_t m_batchsize;
 
     // variables for reading from file and store to memory pool
     std::string m_readPath;
     std::streamsize m_readBuffCap, m_readBuffSz; // Bytes
     std::ifstream m_readFs;
-
-    std::atomic<bool> m_readfinish;
-
-    // memory cache for reading and taken
-    std::vector<std::mutex> m_vReadBuffQueueMtx;
-    std::vector<std::queue<dataRef>> m_vReadBuffQueue;
+    std::atomic<bool> m_readFileFinish;
+    std::atomic<int> m_readFileIter;
+    std::unordered_map<int, int> m_readFileIterMap; // which queue is next buff to process
+    std::vector<mutexRef> m_vReadFileQueueMtx;
+    std::vector<std::queue<dataRef> > m_vReadFileQueue;
+    
+    // memory cache for reading from buff and store to processed memory pool
+    std::mutex m_readBuffIterMtx;
     std::atomic<int> m_readBuffIter;
-    std::unordered_map<size_t, size_t> m_readBuffIterMap; // which queue is next buff to process
+    std::atomic<bool> m_readBuffFinish;
 
-    // get data from buff and process
-    std::mutex m_processMtx;
-    int m_processIter;
-    std::atomic<bool> m_processfinish;
 
     // write processed buff to memory pool
     std::streamsize m_writeBuffCap, m_writeBuffSz;
     std::atomic<bool> m_writeBuffFinish;
-    std::vector<std::mutex> m_vWriteBuffMtx;
-    std::vector<std::queue<dataRef>> m_vWriteBuffQueue;
-    std::atomic<int> m_writeBuffIter;         // next buff to write
-    std::unordered_map<size_t, size_t> m_writeMap; // which queue is next buff to write
+    std::vector<mutexRef> m_vWriteBuffQueueMtx;
+    std::vector<std::queue<dataRef> > m_vWriteBuffQueue;
+    std::unordered_map<int, int> m_writeBuffMap; // which queue is next buff to write
 
     // write buff to file
     std::string m_writePath;
     std::ofstream m_writeFs;
     int m_writeFileIter; // always point to next queue to write
-    bool m_writefinish;
+    bool m_writeFileFinish;
 };
