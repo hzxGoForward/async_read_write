@@ -55,12 +55,12 @@ std::thread::id writeFunc(ReadBuff &rb)
 int main()
 {
     std::cout << "hello world\n";
-    std::string readPath = "/home/hzx/Desktop/clang-format";
-    std::string writePath = "/home/hzx/Desktop/clang_copy-format.txt";
-    ReadBuff rb(readPath, writePath, 4096, 1, 512);
-    // readFunc(rb);
-	// processData(rb, 0);
-	// writeFunc(rb);
+    std::string readPath = ("C:\\Users\\t4641\\Desktop\\性能测试\\recordings-overview.csv_512.runtime");
+    std::string writePath = ("C:\\Users\\t4641\\Desktop\\性能测试\\recordings-overview.csv_512.runtime.copy");
+    ReadBuff rb(readPath, writePath, 409600000, 1, 512);
+    readFunc(rb);
+	processData(rb, 0);
+	writeFunc(rb);
     // for(int i = 0; i < 8; ++i){
 	// 	std::string state = "";
     // 	auto r1 = rb.getNextBuff(state);
@@ -79,9 +79,9 @@ int main()
     // processData(rb, 0);
     // writeFunc(rb);
 
-    std::future<std::thread::id> f1 = std::async(std::launch::async, readFunc, std::ref(rb));
-    std::future<std::thread::id> f2 = std::async(std::launch::async, processData, std::ref(rb), 0);
-    std::future<std::thread::id> f3 = std::async(std::launch::async, writeFunc, std::ref(rb));
+     std::future<std::thread::id> f1 = std::async(std::launch::async, readFunc, std::ref(rb));
+     std::future<std::thread::id> f2 = std::async(std::launch::async, processData, std::ref(rb), 0);
+     std::future<std::thread::id> f3 = std::async(std::launch::async, writeFunc, std::ref(rb));
 
 
     return 0;

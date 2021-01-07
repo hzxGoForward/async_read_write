@@ -2,7 +2,7 @@
 #include <iostream>
 
 ReadBuff::ReadBuff(CS &readPath, CS &writePath, const std::streamsize cap, const size_t poolCnt, const size_t batchsize)
-    : m_readPath(readPath),m_writePath(writePath), m_readBuffCap(cap), m_writeBuffCap(cap), m_readBuffSz(0), m_writeBuffSz(0)
+    : m_readPath(readPath),m_writePath(writePath), m_readBuffCap(cap), m_writeBuffCap(cap), m_batchsize(batchsize), m_readBuffSz(0), m_writeBuffSz(0)
 {
     m_readFs.open(m_readPath, std::ios::in);
     if (m_readFs.is_open() == false)
@@ -240,7 +240,8 @@ std::streamsize ReadBuff::writeFileFromBuff(std::string &state)
     {
         // std::dynamic_pointer_cast<char[]>
         writelen = std::string(buf.get()).size();
-        m_writeFs.write(buf.get(), writelen);
+        // m_writeFs.write(buf.get(), writelen);
+        m_writeFs.write(buf.get(), m_batchsize);
         std::cout<<"----------write len: "<<writelen<<std::endl;
         std::cout<<buf.get()<<std::endl;
     }
