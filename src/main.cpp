@@ -134,10 +134,11 @@ int main()
         vf.emplace_back(std::async(std::launch::async, process, fromBuff, buffQueue[i]));
     }
     std::future<int64_t> f2 = std::async(std::launch::async, writeFile, writePath, buffQueue);
-    // f1.get();
-    //f2.get();
-    //for (auto &f : vf)
-    //    f.get();
+    
+    f1.wait();
+    f2.wait();
+    for (auto &f : vf)
+        f.wait();
 
     std::cout << "read file use " << f1.get() << "seconds\n";
     std::cout << "write file use " << f2.get() << "seconds\n";
