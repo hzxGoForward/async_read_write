@@ -110,9 +110,9 @@ int main()
 {
     std::cout << "hello world, input data path: \n";
 
-    std::string readPath;
-    readPath = "C:\\Users\\t4641\\Desktop\\性能测试\\training.processed.noemoticon.csv_1024.runtime";
-    // std::cin >> readPath;
+    std::string readPath = "";
+    // readPath = "C:\\Users\\t4641\\Desktop\\性能测试\\training.processed.noemoticon.csv_1024.runtime";
+    std::cin >> readPath;
     std::string writePath = readPath + ".copy";
     QueRef fromBuff = std::make_shared<CSyncQueue>(4096000);
     std::vector<std::shared_ptr<CSyncQueue> > buffQueue;
