@@ -1,88 +1,135 @@
-﻿#include "buff.h"
-#include <future>
+﻿#include <future>
 #include <iostream>
+#include <fstream>
 #include <string>
 #include <thread>
+#include "sync_queue.h"
+#include <cstring>
 
-std::thread::id readFunc(ReadBuff &rb)
+
+
+
+
+template <typename T>
+ std::shared_ptr<T> make_shared_array(size_t size)
 {
-    std::cout << "thread readFunc runs, id: " << std::this_thread::get_id() << std::endl;
-
-    while (rb.is_readFileFinish() == false)
-    {
-        std::string state = "";
-        rb.readfileToBuff(state, 256);
-        std::cout << state << std::endl;
-        std::this_thread::yield();
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
-    return std::this_thread::get_id();
-}
-
-std::thread::id processData(ReadBuff &rb, int queueIndex)
-{
-    std::cout << "thread processData runs, id: " << std::this_thread::get_id() << std::endl;
-    while (!rb.is_readBuffFinish())
-    {
-        std::string state = "";
-        auto res = rb.getNextBuff(state);
-        if (res.first != nullptr && res.second != -1)
-            rb.writebuff(res.first, state, queueIndex, res.second);
-        else
-        {
-            std::cout << "write buff fail: "<< state << std::endl;
-        }
-    }
-    return std::this_thread::get_id();
+    return std::shared_ptr<T>(new T[size], std::default_delete<T[]>());
 }
 
 
-std::thread::id writeFunc(ReadBuff &rb)
+ void readFile(const std::string &filepath, QueRef buff)
 {
-    std::cout << "thread writeFunc runs, id: " << std::this_thread::get_id() << std::endl;
-    while (!rb.is_writeFileFinish())
-    {
-        std::string state = "";
-        rb.writeFileFromBuff(state);
-		std::cout<<state<<std::endl;
-        std::this_thread::yield();
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
-    return std::this_thread::get_id();
-}
+ 
+    std::fstream fs(filepath, std::fstream::in | std::fstream::binary);
+     if (fs.is_open() == false)
+         throw std::invalid_argument("can not open " + filepath);
+     
+     uint64_t pos = 0;
+     int readLen = 0;
+     while (fs)
+     {
+         int len = 512;
+         char *buf = new char[len]{0};
+         // memset(char, 0, len);
+         fs.read(buf, len);
+         len = fs.gcount();
+         std::shared_ptr<CDataPkg> datapkgRef = nullptr;
+         if (len > 0)
+             datapkgRef = std::make_shared<CDataPkg>(pos++, len, buf);
+         while (!buff->push(datapkgRef, len))
+             std::this_thread::yield();
+         std::cout << "write len: -----" << datapkgRef->length<< std::endl;
+         readLen += len;
+     }
+     buff->writeEnd();
+     fs.close();
+     std::cout << "read file finished, total read " << readLen << "Bytes\n";
+ }
+
+ 
+  void writeFile(const std::string &filepath, std::vector<QueRef> vFromBuff)
+ {
+     std::fstream fs(filepath, std::fstream::out | std::fstream::binary);
+     if (fs.is_open() == false)
+         throw std::invalid_argument("can not open " + filepath);
+
+     uint64_t nextpos = 0;
+     int writeLen = 0;
+     int lastwrite = 1;
+     size_t endCnt = 0;
+     while (!(lastwrite == 0 && endCnt == vFromBuff.size()))
+     {
+         lastwrite = 0;
+         endCnt = 0;
+         for (QueRef buff : vFromBuff)
+         {
+             std::shared_ptr<CDataPkg> datapkgRef = nullptr;
+             if (buff->frontPos() == nextpos && buff->pop(datapkgRef))
+             {
+                 fs.write(datapkgRef->data.get(), datapkgRef->length);
+                 std::cout << "write len: -----" << datapkgRef->length << std::endl;
+                 lastwrite = datapkgRef->length;
+                 writeLen += lastwrite;
+                 ++nextpos;
+             }
+             if (buff->is_end())
+                 endCnt++;
+         }
+     }
+     fs.close();
+     std::cout << "write file finished, total write " << writeLen << " Bytes\n";
+ }
+
+
+ void process(QueRef fromBuff, QueRef toBuff)
+ {
+    
+     int lastProcess = 1;
+     int processLen = 0;
+     while (!(lastProcess == 0 && fromBuff->is_end()))
+     {
+         lastProcess = 0;
+         std::shared_ptr<CDataPkg> datapkgRef = nullptr;
+         if (fromBuff->pop(datapkgRef))
+         {
+             // todo process 
+             lastProcess = datapkgRef->length;
+             while (toBuff->push(datapkgRef, datapkgRef->length) == false)
+             {
+                 std::this_thread::yield();
+             }
+
+             std::cout << "process len: -----" << datapkgRef->length << std::endl;
+             lastProcess = datapkgRef->length;
+             processLen += lastProcess;
+         }
+     }
+     toBuff->writeEnd();
+     std::cout << " process file finished, total process " << processLen
+               << "Bytes, thread id: " << std::this_thread::get_id() << std::endl;
+ }
 
 
 int main()
 {
-    std::cout << "hello world\n";
-    std::string readPath = ("C:\\Users\\t4641\\Desktop\\性能测试\\recordings-overview.csv_512.runtime");
-    std::string writePath = ("C:\\Users\\t4641\\Desktop\\性能测试\\recordings-overview.csv_512.runtime.copy");
-    ReadBuff rb(readPath, writePath, 409600000, 1, 512);
-    readFunc(rb);
-	processData(rb, 0);
-	writeFunc(rb);
-    // for(int i = 0; i < 8; ++i){
-	// 	std::string state = "";
-    // 	auto r1 = rb.getNextBuff(state);
-    	
-	// 	rb.writebuff(r1.first, state, 0, r1.second);
-	// 	std::cout << state << std::endl;
-	// 	std::cout<< r1.first<< std::endl;
-	// }
-	
-    
-    // auto r2 = rb.getNextBuff(state);
-    // std::cout << state << r2.first<< std::endl;
-    
-    // auto r3 = rb.getNextBuff(state);
-    // std::cout << state << r3.first<< std::endl;
-    // processData(rb, 0);
-    // writeFunc(rb);
+    std::cout << "hello world, input data path: \n";
 
-     std::future<std::thread::id> f1 = std::async(std::launch::async, readFunc, std::ref(rb));
-     std::future<std::thread::id> f2 = std::async(std::launch::async, processData, std::ref(rb), 0);
-     std::future<std::thread::id> f3 = std::async(std::launch::async, writeFunc, std::ref(rb));
-
-
-    return 0;
+    std::string readPath;
+    readPath = "C:\\Users\\t4641\\Desktop\\性能测试\\training.processed.noemoticon.csv_1024.runtime";
+    // std::cin >> readPath;
+    std::string writePath = readPath + ".copy";
+    QueRef fromBuff = std::make_shared<CSyncQueue>(4096000);
+    std::vector<std::shared_ptr<CSyncQueue> > buffQueue;
+    std::future<void> f1 = std::async(std::launch::async, readFile, readPath, fromBuff);
+    std::vector<std::future<void>> vf;
+    for (size_t i = 0; i < std::thread::hardware_concurrency(); ++i)
+    {
+        buffQueue.emplace_back(new CSyncQueue(409600));
+        vf.emplace_back(std::async(std::launch::async, process, fromBuff, buffQueue[i]));
+    }
+    std::future<void> f2 = std::async(std::launch::async, writeFile, writePath, buffQueue);
+    f1.get();
+    f2.get();
+    for (auto &f : vf)
+        f.get();
 }

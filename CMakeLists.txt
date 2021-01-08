@@ -1,6 +1,6 @@
 CMAKE_MINIMUM_REQUIRED(VERSION 3.5)
 PROJECT(async_read_write VERSION 0.1.0)
-SET(SOURCES ./src/main.cpp ./src/buff.cpp)
+SET(SOURCES ./src/main.cpp)
 ADD_EXECUTABLE(${PROJECT_NAME} ${SOURCES})
 # 允许c++11标准、O3优化、多线程。match选项可避免一些cpu上的问题
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
