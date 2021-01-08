@@ -6,6 +6,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <functional>
 
 
 template <typename T>
@@ -15,8 +16,9 @@ std::shared_ptr<T> make_shared_array(size_t size)
 }
 
 
-void readFile(const std::string &filepath, QueRef buff)
+int64_t readFile(const std::string &filepath, QueRef buff)
 {
+    auto start = std::chrono::steady_clock::now();
     std::fstream fs(filepath, std::fstream::in | std::fstream::binary);
     if (fs.is_open() == false)
         throw std::invalid_argument("can not open " + filepath);
@@ -41,11 +43,13 @@ void readFile(const std::string &filepath, QueRef buff)
     buff->writeEnd();
     fs.close();
     std::cout << "read file finished, total read " << readLen << "Bytes\n";
+    auto end = std::chrono::steady_clock::now();
+    return (std::chrono::duration_cast<std::chrono::seconds>(end - start)).count();
 }
 
-
-void writeFile(const std::string &filepath, std::vector<QueRef> vFromBuff)
+int64_t writeFile(const std::string &filepath, std::vector<QueRef> vFromBuff)
 {
+    auto start = std::chrono::steady_clock::now();
     std::fstream fs(filepath, std::fstream::out | std::fstream::binary);
     if (fs.is_open() == false)
         throw std::invalid_argument("can not open " + filepath);
@@ -75,11 +79,14 @@ void writeFile(const std::string &filepath, std::vector<QueRef> vFromBuff)
     }
     fs.close();
     std::cout << "write file finished, total write " << writeLen << " Bytes\n";
+    auto end = std::chrono::steady_clock::now();
+    return (std::chrono::duration_cast<std::chrono::seconds>(end - start)).count();
 }
 
 
-void process(QueRef fromBuff, QueRef toBuff)
+int64_t process(QueRef fromBuff, QueRef toBuff)
 {
+    auto start = std::chrono::steady_clock::now();
     int lastProcess = 1;
     int processLen = 0;
     while (!(lastProcess == 0 && fromBuff->is_end()))
@@ -103,6 +110,8 @@ void process(QueRef fromBuff, QueRef toBuff)
     toBuff->writeEnd();
     std::cout << " process file finished, total process " << processLen
               << "Bytes, thread id: " << std::this_thread::get_id() << std::endl;
+    auto end = std::chrono::steady_clock::now();
+    return (std::chrono::duration_cast<std::chrono::seconds>(end - start)).count();
 }
 
 
@@ -116,16 +125,23 @@ int main()
     std::string writePath = readPath + ".copy";
     QueRef fromBuff = std::make_shared<CSyncQueue>(4096000);
     std::vector<std::shared_ptr<CSyncQueue> > buffQueue;
-    std::future<void> f1 = std::async(std::launch::async, readFile, readPath, fromBuff);
-    std::vector<std::future<void> > vf;
-    for (size_t i = 0; i < std::thread::hardware_concurrency(); ++i)
+    std::future<int64_t> f1 = std::async(std::launch::async, readFile, readPath, fromBuff);
+    std::vector<std::future<int64_t> > vf;
+    size_t processCnt = std::thread::hardware_concurrency() > 2 ? (std::thread::hardware_concurrency()-2):1;
+    for (size_t i = 0; i < processCnt; ++i)
     {
         buffQueue.emplace_back(new CSyncQueue(409600));
         vf.emplace_back(std::async(std::launch::async, process, fromBuff, buffQueue[i]));
     }
-    std::future<void> f2 = std::async(std::launch::async, writeFile, writePath, buffQueue);
-    f1.get();
+    std::future<int64_t> f2 = std::async(std::launch::async, writeFile, writePath, buffQueue);
+    
     f2.get();
     for (auto &f : vf)
         f.get();
+
+    std::cout << "read file use " << f1.get() << "seconds\n";
+    std::cout << "write file use " << f2.get() << "seconds\n";
+    for (size_t i = 0; i < vf.size(); ++i)
+        std::cout << "process " << i << "use " << vf[i].get() << "sec\n";
+
 }

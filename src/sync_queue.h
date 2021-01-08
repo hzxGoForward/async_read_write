@@ -5,6 +5,7 @@
 
 
 
+
 typedef std::shared_ptr<char> SPChar;
 class CSyncQueue;
 typedef std::shared_ptr<CSyncQueue> QueRef;
