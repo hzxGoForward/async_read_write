@@ -120,7 +120,7 @@ int main()
     std::cout << "hello world, input data path: \n";
 
     std::string readPath = "";
-    // readPath = "C:\\Users\\t4641\\Desktop\\性能测试\\training.processed.noemoticon.csv_1024.runtime";
+    // readPath = "C:\\Users\\t4641\\Desktop\\性能测试\\recordings-overview.csv_512.runtime";
     std::cin >> readPath;
     std::string writePath = readPath + ".copy";
     QueRef fromBuff = std::make_shared<CSyncQueue>(4096000);
@@ -134,14 +134,14 @@ int main()
         vf.emplace_back(std::async(std::launch::async, process, fromBuff, buffQueue[i]));
     }
     std::future<int64_t> f2 = std::async(std::launch::async, writeFile, writePath, buffQueue);
-    
-    f2.get();
-    for (auto &f : vf)
-        f.get();
+    // f1.get();
+    //f2.get();
+    //for (auto &f : vf)
+    //    f.get();
 
     std::cout << "read file use " << f1.get() << "seconds\n";
     std::cout << "write file use " << f2.get() << "seconds\n";
     for (size_t i = 0; i < vf.size(); ++i)
-        std::cout << "process " << i << "use " << vf[i].get() << "sec\n";
+        std::cout << "process " << i << " use " << vf[i].get() << "sec\n";
 
 }
