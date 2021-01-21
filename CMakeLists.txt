@@ -3,7 +3,7 @@ PROJECT(async_read_write VERSION 0.1.0)
 
 include_directories(${PROJECT_SOURCE_DIR}/src)
 
-SET(SOURCES ./src/main.cpp ./src/boost_read_hzx.cpp ./src/sync_queue.h ./src/boost_read_hzx.h )
+SET(SOURCES ./src/main.cpp ./src/boost_read_hzx.cpp ./src/sync_queue.h ./src/boost_read_hzx.h ./src/threadSafeQueue.h)
 
 ADD_EXECUTABLE(${PROJECT_NAME} ${SOURCES})
 

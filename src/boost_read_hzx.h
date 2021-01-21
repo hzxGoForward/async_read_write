@@ -3,12 +3,13 @@
 #define _BOOST_READ_HZX_H
 
 #include <boost/asio.hpp>
-#include "sync_queue.h"
+#include "threadSafeQueue.h"
 #include <string>
 
 
-int64_t async_read_file(const std::string &filepath, CSycnQueue_ptr_t &buff);
-int64_t writeFile(const std::string &filepath, std::vector<CSycnQueue_ptr_t> &vFromBuff);
+std::pair<int64_t, int64_t> async_read_file(const std::string &filepath, CThreadsafeQueue_ptr &buff);
+std::pair<int64_t, int64_t> writeFile(const std::string &filepath, std::vector<CThreadsafeQueue_ptr> &vFromBuff);
+std::pair<int64_t, int64_t> process(CThreadsafeQueue_ptr &fromBuff, CThreadsafeQueue_ptr &toBuff);
+
 void rpw_test();
-int64_t process(CSycnQueue_ptr_t fromBuff, CSycnQueue_ptr_t &toBuff);
 #endif

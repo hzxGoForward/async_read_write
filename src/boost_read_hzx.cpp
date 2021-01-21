@@ -1,5 +1,5 @@
 ﻿#include "boost_read_hzx.h"
-#include "sync_queue.h"
+#include "threadSafeQueue.h"
 #include <boost/asio.hpp>
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/windows/random_access_handle.hpp>
@@ -14,10 +14,9 @@
 #include <string>
 #include <windows.h>
 
-typedef void(
-    haldel_type)(CSycnQueue_ptr_t &buff, const CDataPkg_ptr_t &datapkg, const boost::system::error_code &e, int read);
+typedef void(haldel_type)(const CDataPkg_ptr_t &datapkg, const boost::system::error_code &e, int read);
 
-int64_t async_read_file(const std::string &filepath, CSycnQueue_ptr_t &buff)
+std::pair<int64_t, int64_t> async_read_file(const std::string &filepath, CThreadsafeQueue_ptr &buff)
 {
     auto start = std::chrono::steady_clock::now();
     HANDLE hfile =
@@ -25,158 +24,170 @@ int64_t async_read_file(const std::string &filepath, CSycnQueue_ptr_t &buff)
     if (GetLastError() == ERROR_FILE_NOT_FOUND)
     {
         throw std::invalid_argument("ERROR_FILE_NOT_FOUND " + filepath);
-        return -1;
+        return {0, 0};
     }
 
     boost::asio::io_context io;
     boost::asio::windows::random_access_handle rad(io, hfile);
 
 
-    uint64_t pos = 0;
-    uint64_t read_len = 0;
-    uint64_t offset = 0;
-    uint64_t file_len = ::GetFileSize(hfile, nullptr);
-    const uint64_t len = 256;
+    int64_t pos = 0;
+    int64_t offset = 0;
+    int64_t file_len = ::GetFileSize(hfile, nullptr);
+    const int64_t len = 256;
+    int read_len = 0;
 
-    std::function<haldel_type> handle_fun = [&](CSycnQueue_ptr_t &buff, const CDataPkg_ptr_t &datapkg,
-                                                const boost::system::error_code &e, int read) {
-        read_len += read;
+    std::function<haldel_type> handle_fun = [&](const CDataPkg_ptr_t &datapkg, const boost::system::error_code &e,
+                                                int read) -> void {
+        datapkg->ready = true;
         datapkg->length = read;
-        while (buff->push(datapkg, datapkg->length) == false)
-        {
-            std::unique_lock<std::mutex> lg(buff->mutex());
-            buff->pop_cond().wait(lg, [&] { return buff->full() == false; });
-        }
-        // std::cout << datapkg->pos << " successfully inserted into queue\n ";
+        read_len += read;
     };
 
     try
     {
         while (offset < file_len)
         {
-            CDataPkg_ptr_t datapkg = std::make_shared<CDataPkg>(pos++, len);
-            boost::asio::mutable_buffer dataBuff(static_cast<void *>(datapkg->data.get()), datapkg->length);
-            boost::asio::async_read_at(rad, offset, dataBuff,
-                std::bind(handle_fun, buff, datapkg, std::placeholders::_1, std::placeholders::_2));
+            CDataPkg_ptr_t datapkgRef = std::make_shared<CDataPkg>(pos++, len);
+            buff->push(datapkgRef);
+            boost::asio::mutable_buffer dataBuff(static_cast<void *>(datapkgRef->data.get()), datapkgRef->length);
+            boost::asio::async_read_at(
+                rad, offset, dataBuff, std::bind(handle_fun, datapkgRef, std::placeholders::_1, std::placeholders::_2));
             offset += len;
+            boost::asio::ip::tcp::socket;
+            // boost::asio::async_read()
         }
     }
     catch (...)
     {
         std::cout << "error" << std::endl;
-        return -1;
     }
     io.run();
 
     // write finish
-    buff->writeEnd();
+    buff->set_end();
     auto end = std::chrono::steady_clock::now();
-    std::cout << "total write " << file_len << " Bytes " << std::endl;
-    return (std::chrono::duration_cast<std::chrono::seconds>(end - start)).count();
+    std::cout << "total read " << read_len << " Bytes " << std::endl;
+    std::cout << "file length " << file_len << " Bytes " << std::endl;
+    return {(std::chrono::duration_cast<std::chrono::seconds>(end - start)).count(), read_len};
 }
 
-int64_t process(CSycnQueue_ptr_t fromBuff, CSycnQueue_ptr_t &toBuff)
+
+
+
+std::pair<int64_t, int64_t> process(CThreadsafeQueue_ptr& fromBuff, CThreadsafeQueue_ptr &toBuff)
 {
     auto start = std::chrono::steady_clock::now();
-    int lastProcess = 1;
-    int processLen = 0;
-
-    while (!(fromBuff->is_end() && fromBuff->empty()))
+    int64_t process_len = 0;
+    while (!(fromBuff->empty() && fromBuff->is_end()))
     {
         std::shared_ptr<CDataPkg> datapkgRef = nullptr;
-        while (!fromBuff->pop(datapkgRef))
+        if (fromBuff->front(datapkgRef) && datapkgRef->ready && fromBuff->pop(datapkgRef))
         {
-            std::unique_lock<std::mutex> ul(fromBuff->mutex());
-            fromBuff->push_cond().wait(ul, [&]() { return !fromBuff->empty()||fromBuff->is_end(); });
-            if (fromBuff->is_end())
-                break;
-        }
-
-        if (datapkgRef)
-        {
-            while (toBuff->push(datapkgRef, datapkgRef->length) == false)
+            // todo process
+            while (toBuff->push(datapkgRef) == false)
             {
-                std::unique_lock<std::mutex> ul(toBuff->mutex());
-                toBuff->pop_cond().wait(ul, [&]() { return toBuff->full() == false; });
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
             }
-            processLen += datapkgRef->length;
+            if (process_len && process_len % 100000 == 0)
+                std::cout << "process len: -----" << process_len << std::endl;
+            process_len += datapkgRef->length;
         }
-    } 
-    toBuff->writeEnd();
-    std::cout << " process file finished, total process " << processLen
+        else
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    toBuff->set_end();
+    std::cout << "process finished, total process " << process_len
               << " Bytes, thread id: " << std::this_thread::get_id() << std::endl;
     auto end = std::chrono::steady_clock::now();
-    return (std::chrono::duration_cast<std::chrono::seconds>(end - start)).count();
+    return {(std::chrono::duration_cast<std::chrono::seconds>(end - start)).count(), process_len};
 }
 
-int64_t writeFile(const std::string &filepath, std::vector<CSycnQueue_ptr_t> &vFromBuff)
+
+std::pair<int64_t, int64_t> writeFile(const std::string &filepath, std::vector<CThreadsafeQueue_ptr> &vFromBuff)
 {
-    HANDLE hfile =
-        ::CreateFile(filepath.data(), GENERIC_WRITE, 0, 0, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED, 0);
+    auto start = std::chrono::steady_clock::now();
+
+    HANDLE hfile = ::CreateFile(
+        filepath.data(), GENERIC_WRITE, 0, 0, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED, 0);
     if (GetLastError() == ERROR_FILE_NOT_FOUND)
     {
         throw std::invalid_argument("ERROR_FILE_NOT_FOUND " + filepath);
-        return -1;
     }
-
-    auto start = std::chrono::steady_clock::now();
+    
+    
     boost::asio::io_context io;
     boost::asio::windows::random_access_handle rad(io, hfile);
+    int64_t nextpos = 0;
+    int64_t write_len = 0;
+    auto handle_fun = [&](const boost::system::error_code &e, std::size_t write) -> void { write_len += write; };
 
-    uint64_t nextpos = 0;
-    int writeLen = 0;
-    int lastwrite = 1;
-    int offset = 0;
+
     size_t endCnt = 0;
-    auto f = [](const boost::system::error_code &e, int read) { std::cout << "write " << read << std::endl; };
-    while (!(lastwrite == 0 && endCnt == vFromBuff.size()))
+    uint64_t offset = 0;
+    std::cout << "start writting -----" << std::endl;
+    while (endCnt != vFromBuff.size())
     {
-        lastwrite = 0;
         endCnt = 0;
-        for (CSycnQueue_ptr_t buff : vFromBuff)
+        for (CThreadsafeQueue_ptr buff : vFromBuff)
         {
             std::shared_ptr<CDataPkg> datapkgRef = nullptr;
-            if (buff->frontPos() == nextpos && buff->pop(datapkgRef))
+            if (buff->front(datapkgRef) && datapkgRef->pos == nextpos && buff->pop(datapkgRef))
             {
                 boost::asio::mutable_buffer dataBuff(static_cast<void *>(datapkgRef->data.get()), datapkgRef->length);
-                boost::asio::async_write_at(rad, offset, dataBuff, f);
+                boost::asio::async_write_at(rad, offset, dataBuff, handle_fun);
                 offset += datapkgRef->length;
-                lastwrite = datapkgRef->length;
-                writeLen += lastwrite;
                 ++nextpos;
             }
-            if (buff->is_end()&&buff->empty())
+            if (buff->is_end() && buff->empty())
                 endCnt++;
         }
     }
-    io.run();
-    std::cout << "write file finished, total write " << writeLen << " Bytes\n";
-    auto end = std::chrono::steady_clock::now();
-    return (std::chrono::duration_cast<std::chrono::seconds>(end - start)).count();
-}
 
+    io.run();
+    std::cout << "write file finished, total write " << write_len << " Bytes\n";
+    auto end = std::chrono::steady_clock::now();
+    return {(std::chrono::duration_cast<std::chrono::seconds>(end - start)).count(), write_len};
+}
 
 void rpw_test()
 {
+    // read file
     std::string readPath = "";
-    readPath = "C:\\Users\\t4641\\Desktop\\性能测试\\training.processed.noemoticon.csv_1024.runtime";
-    // std::cin >> readPath;
-    CSycnQueue_ptr_t fromBuff = std::make_shared<CSyncQueue>(4096000);
-    async_read_file(readPath, fromBuff);
-    
-    std::vector<std::future<int64_t> > vf;
-    std::vector<std::shared_ptr<CSyncQueue> > buffQueue;
+    readPath = "C:\\Users\\t4641\\Desktop\\性能测试\\training.processed.noemoticon.csv";
+    CThreadsafeQueue_ptr fromBuff = std::make_shared<CThreadSafeQueue<CDataPkg_ptr_t> >();
+    auto rf = std::async(std::launch::async, async_read_file, readPath, fromBuff);
+
+
+    // process file
+    std::vector<std::future<std::pair<int64_t, int64_t> > > vf;
+    std::vector<std::shared_ptr<CThreadSafeQueue<CDataPkg_ptr_t> > > buffQueue;
     size_t processCnt = std::thread::hardware_concurrency() > 2 ? (std::thread::hardware_concurrency() - 2) : 1;
-    processCnt = 1;
-     for (size_t i = 0; i < processCnt; ++i)
+    // processCnt = 2;
+    for (size_t i = 0; i < processCnt; ++i)
     {
-        buffQueue.emplace_back(new CSyncQueue(409600));
+        buffQueue.emplace_back(new CThreadSafeQueue<CDataPkg_ptr_t>());
         vf.emplace_back(std::async(std::launch::async, process, fromBuff, buffQueue[i]));
     }
 
-     for (auto &f : vf)
-        f.wait();
-     std::string writePath = readPath + ".copy";
-     auto wf = std::async(std::launch::async, writeFile, writePath, buffQueue);
-     wf.wait();
+
+    // write file
+    std::string writePath = readPath + ".copy";
+    auto wf = std::async(std::launch::async, writeFile, writePath, buffQueue);
+    
+    
+    
+    // statics
+    int64_t process_sum = 0;
+    for (auto &f : vf)
+    {
+        auto f1 = f.get();
+        std::cout << "process " << f1.second << " Bytes using " << f1.first << " seconds \n";
+        process_sum += f1.second;
+    }
+
+    std::cout << "total process  " << process_sum << " Bytes\n";
+    std::cout << "file size is   " << rf.get().second << " Bytes\n";
+    auto wfRes = wf.get();
+    std::cout << "total write " << wfRes.second << " Bytes, using " << wfRes.first<<" seconds \n";
 }
