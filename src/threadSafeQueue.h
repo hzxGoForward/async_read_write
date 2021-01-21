@@ -14,7 +14,7 @@
 template <typename T>
 class CThreadSafeQueue
 {
-#define GUARD_LOCK std::lock_guard<std::mutex> lg(m_queueMtx)
+#define GUARD_LOCK std::unique_lock<std::mutex> lg(m_queueMtx)
     using value_type = T;
     using size_type = typename std::list<T>::size_type;
 
@@ -47,21 +47,43 @@ public:
 
     bool push(const T &val)
     {
-        GUARD_LOCK;
-        if (m_queue.size() >= m_maxSize)
-            return false;
-        m_queue.push_back(val);
+        {
+            std::unique_lock<std::mutex> ul(m_queueMtx);
+            while (m_queue.size() >= m_maxSize)
+            {
+                m_condVar.wait(ul, [&] { return m_queue.size() < m_maxSize; });
+            }
+            m_queue.push_back(val);
+        }
+        m_condVar.notify_one();
         return true;
     }
 
     bool pop(T &val)
     {
-        GUARD_LOCK;
-        if (m_queue.empty())
-            return false;
-        val = std::move(m_queue.front());
-        m_queue.pop_front();
-        return true;
+        bool pop_success = false;
+        bool notify_all = false;
+        // std::cout << "pop...\n";
+        {
+            std::unique_lock<std::mutex> ul(m_queueMtx);
+            while (m_queue.empty()&& !m_writeEnd)
+            {
+                m_condVar.wait(ul, [&]() { return !m_queue.empty() || (m_queue.empty() && m_writeEnd); });
+            }
+            if (!m_queue.empty())
+            {
+                val = m_queue.front();
+                m_queue.pop_front();
+                pop_success = true;
+            }
+            //else if (m_queue.empty() && m_writeEnd)
+            //    notify_all = true;
+        }
+        m_condVar.notify_one();
+        if (notify_all)
+            m_condVar.notify_all();
+        // std::cout << "pop finish\n";
+        return pop_success;
     }
 
     bool front(T &t)
@@ -77,6 +99,7 @@ public:
     {
         GUARD_LOCK;
         m_writeEnd = true;
+        m_condVar.notify_all();
     }
 
     bool is_end()
@@ -88,12 +111,13 @@ public:
     std::mutex &mutex() { return m_queueMtx; }
     std::list<T> &content() { return m_queue; }
 
-private:
+
 protected:
     mutable std::mutex m_queueMtx;
     std::list<T> m_queue;
     size_type m_maxSize;
     bool m_writeEnd;
+    std::condition_variable m_condVar;
 
 #undef GUARD_LOCK
 };
