@@ -5,6 +5,7 @@
 #include <boost/asio/windows/random_access_handle.hpp>
 #include <chrono>
 #include <condition_variable>
+#include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <functional>
@@ -13,7 +14,6 @@
 #include <mutex>
 #include <string>
 #include <windows.h>
-#include <cstdio>
 
 typedef void(haldel_type)(const CDataPkg_ptr_t &datapkg, const boost::system::error_code &e, int read);
 
@@ -85,7 +85,7 @@ std::pair<int64_t, int64_t> process(CThreadsafeQueue_ptr fromBuff, CThreadsafeQu
         if (fromBuff->pop(datapkgRef) && toBuff->push(datapkgRef))
         {
             process_len += datapkgRef->length;
-            if (process_len > 0 && process_len % (1024*100) == 0)
+            if (process_len > 0 && process_len % (1024 * 100) == 0)
                 std::cout << "process len: -----" << process_len << " thread id : " << std::this_thread::get_id()
                           << std::endl;
         }
@@ -114,11 +114,10 @@ std::pair<int64_t, int64_t> writeFile(const std::string &filepath, std::vector<C
     boost::asio::windows::random_access_handle rad(io, hfile);
     int64_t nextpos = 0;
     int64_t write_len = 0;
-    auto handle_fun = [&](const boost::system::error_code &e, std::size_t write) -> void { 
-        write_len += write; 
+    auto handle_fun = [&](const boost::system::error_code &e, std::size_t write) -> void {
+        write_len += write;
         if (write_len > 0 && write_len % (1024 * 100) == 0)
-            std::cout << "write len: -----" << write_len << " thread id : " << std::this_thread::get_id()<< std::endl;
-    
+            std::cout << "write len: -----" << write_len << " thread id : " << std::this_thread::get_id() << std::endl;
     };
 
 
@@ -177,9 +176,8 @@ void rpw_test()
 
     // write file
     std::string writePath = readPath + ".copy";
-    
+
     auto wf = std::async(std::launch::async, writeFile, std::cref(writePath), std::ref(buffQueue));
-    
 
 
     // statics
@@ -192,7 +190,7 @@ void rpw_test()
     }
     std::cout << "total read     " << rf.get().second << " Bytes\n";
     std::cout << "total process  " << process_sum << " Bytes\n";
-   
+
     auto wfRes = wf.get();
     std::cout << "total write " << wfRes.second << " Bytes, using " << wfRes.first << " millseconds \n";
 }

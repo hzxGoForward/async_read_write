@@ -19,7 +19,10 @@ class CThreadSafeQueue
     using size_type = typename std::list<T>::size_type;
 
 public:
-    explicit CThreadSafeQueue(size_type maxSz = std::numeric_limits<size_type>::max()) : m_maxSize(maxSz), m_writeEnd(false) {}
+    explicit CThreadSafeQueue(size_type maxSz = std::numeric_limits<size_type>::max())
+        : m_maxSize(maxSz), m_writeEnd(false)
+    {
+    }
 
     size_type size() const
     {
@@ -45,7 +48,7 @@ public:
         return m_queue.size() >= m_maxSize;
     }
 
-    //bool push(const T &val)
+    // bool push(const T &val)
     //{
     //    {
     //        std::unique_lock<std::mutex> ul(m_queueMtx);
@@ -95,17 +98,17 @@ public:
             if (!m_queue.empty())
             {
                 // pop之前是满载状态，发出notFull信号
-                if (m_queue.size()== m_maxSize)
+                if (m_queue.size() == m_maxSize)
                     notify_notFull = true;
-                
-                // pop 
+
+                // pop
                 val = m_queue.front();
                 m_queue.pop_front();
                 pop_success = true;
 
                 // 队列为空，且不再增加元素，则告知其他线程结束等待
                 if (m_queue.empty() && m_writeEnd)
-                    notify_all = true; 
+                    notify_all = true;
             }
         }
         std::cout << "pop...finish\n";
@@ -118,7 +121,7 @@ public:
     }
 
 
-    //bool pop(T &val)
+    // bool pop(T &val)
     //{
     //    bool pop_success = false;
     //    bool notify_all = false;

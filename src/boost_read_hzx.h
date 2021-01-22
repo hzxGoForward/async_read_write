@@ -2,8 +2,8 @@
 #ifndef _BOOST_READ_HZX_H
 #define _BOOST_READ_HZX_H
 
-#include <boost/asio.hpp>
 #include "threadSafeQueue.h"
+#include <boost/asio.hpp>
 #include <string>
 
 std::pair<int64_t, int64_t> async_read_file(const std::string &filepath, CThreadsafeQueue_ptr buff);
