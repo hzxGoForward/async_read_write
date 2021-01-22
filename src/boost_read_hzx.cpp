@@ -13,10 +13,11 @@
 #include <mutex>
 #include <string>
 #include <windows.h>
+#include <cstdio>
 
 typedef void(haldel_type)(const CDataPkg_ptr_t &datapkg, const boost::system::error_code &e, int read);
 
-std::pair<int64_t, int64_t> async_read_file(const std::string &filepath, CThreadsafeQueue_ptr &buff)
+std::pair<int64_t, int64_t> async_read_file(const std::string &filepath, CThreadsafeQueue_ptr buff)
 {
     auto start = std::chrono::steady_clock::now();
     HANDLE hfile =
@@ -74,7 +75,7 @@ std::pair<int64_t, int64_t> async_read_file(const std::string &filepath, CThread
 }
 
 
-std::pair<int64_t, int64_t> process(CThreadsafeQueue_ptr &fromBuff, CThreadsafeQueue_ptr &toBuff)
+std::pair<int64_t, int64_t> process(CThreadsafeQueue_ptr fromBuff, CThreadsafeQueue_ptr toBuff)
 {
     auto start = std::chrono::steady_clock::now();
     int64_t process_len = 0;
@@ -100,7 +101,7 @@ std::pair<int64_t, int64_t> process(CThreadsafeQueue_ptr &fromBuff, CThreadsafeQ
 std::pair<int64_t, int64_t> writeFile(const std::string &filepath, std::vector<CThreadsafeQueue_ptr> &vFromBuff)
 {
     auto start = std::chrono::steady_clock::now();
-
+    std::remove(filepath.data());
     HANDLE hfile = ::CreateFile(
         filepath.data(), GENERIC_WRITE, 0, 0, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED, 0);
     if (GetLastError() == ERROR_FILE_NOT_FOUND)
@@ -157,7 +158,8 @@ void rpw_test()
     std::string readPath = "";
     readPath = "C:\\Users\\t4641\\Desktop\\性能测试\\training.processed.noemoticon.csv";
     CThreadsafeQueue_ptr fromBuff = std::make_shared<CThreadSafeQueue<CDataPkg_ptr_t> >(10);
-    auto rf = std::async(std::launch::async, async_read_file, readPath, fromBuff);
+    // c++ 线程对象默认使用拷贝构造函数，因此使用std::ref 和std::cref告知线程使用的是引用
+    auto rf = std::async(std::launch::async, async_read_file, std::cref(readPath), fromBuff);
 
 
     // process file
@@ -175,7 +177,8 @@ void rpw_test()
 
     // write file
     std::string writePath = readPath + ".copy";
-    auto wf = std::async(std::launch::async, writeFile, writePath, buffQueue);
+    
+    auto wf = std::async(std::launch::async, writeFile, std::cref(writePath), std::ref(buffQueue));
     
 
 

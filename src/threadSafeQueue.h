@@ -45,46 +45,105 @@ public:
         return m_queue.size() >= m_maxSize;
     }
 
+    //bool push(const T &val)
+    //{
+    //    {
+    //        std::unique_lock<std::mutex> ul(m_queueMtx);
+    //        while (m_queue.size() >= m_maxSize)
+    //        {
+    //            m_condVar.wait(ul, [&] { return m_queue.size() < m_maxSize; });
+    //        }
+    //        m_queue.push_back(val);
+    //    }
+    //    m_condVar.notify_one();
+    //    return true;
+    //}
+
     bool push(const T &val)
     {
+        bool notify_notEmpty = false;
+        std::cout << "push...\n";
         {
             std::unique_lock<std::mutex> ul(m_queueMtx);
             while (m_queue.size() >= m_maxSize)
             {
-                m_condVar.wait(ul, [&] { return m_queue.size() < m_maxSize; });
+                m_notFull_condVar.wait(ul, [&] { return m_queue.size() < m_maxSize; });
             }
+            // push 之前是空载状态，发出notEmpty信号
+            if (m_queue.empty())
+                notify_notEmpty = true;
             m_queue.push_back(val);
         }
-        m_condVar.notify_one();
+        if (notify_notEmpty)
+            m_notEmpty_condVar.notify_one();
+        std::cout << "push finish...\n";
         return true;
     }
 
     bool pop(T &val)
     {
         bool pop_success = false;
+        bool notify_notFull = false;
         bool notify_all = false;
-        // std::cout << "pop...\n";
+        std::cout << "pop...\n";
         {
             std::unique_lock<std::mutex> ul(m_queueMtx);
-            while (m_queue.empty()&& !m_writeEnd)
+            while (m_queue.empty() && !m_writeEnd)
             {
-                m_condVar.wait(ul, [&]() { return !m_queue.empty() || (m_queue.empty() && m_writeEnd); });
+                m_notEmpty_condVar.wait(ul, [&]() { return !m_queue.empty() || (m_queue.empty() && m_writeEnd); });
             }
             if (!m_queue.empty())
             {
+                // pop之前是满载状态，发出notFull信号
+                if (m_queue.size()== m_maxSize)
+                    notify_notFull = true;
+                
+                // pop 
                 val = m_queue.front();
                 m_queue.pop_front();
                 pop_success = true;
+
+                // 队列为空，且不再增加元素，则告知其他线程结束等待
+                if (m_queue.empty() && m_writeEnd)
+                    notify_all = true; 
             }
-            //else if (m_queue.empty() && m_writeEnd)
-            //    notify_all = true;
         }
-        m_condVar.notify_one();
+        std::cout << "pop...finish\n";
+        if (notify_notFull)
+            m_notFull_condVar.notify_one();
         if (notify_all)
-            m_condVar.notify_all();
-        // std::cout << "pop finish\n";
+            m_notEmpty_condVar.notify_all();
+
         return pop_success;
     }
+
+
+    //bool pop(T &val)
+    //{
+    //    bool pop_success = false;
+    //    bool notify_all = false;
+    //    // std::cout << "pop...\n";
+    //    {
+    //        std::unique_lock<std::mutex> ul(m_queueMtx);
+    //        while (m_queue.empty()&& !m_writeEnd)
+    //        {
+    //            m_condVar.wait(ul, [&]() { return !m_queue.empty() || (m_queue.empty() && m_writeEnd); });
+    //        }
+    //        if (!m_queue.empty())
+    //        {
+    //            val = m_queue.front();
+    //            m_queue.pop_front();
+    //            pop_success = true;
+    //        }
+    //        //else if (m_queue.empty() && m_writeEnd)
+    //        //    notify_all = true;
+    //    }
+    //    m_condVar.notify_one();
+    //    if (notify_all)
+    //        m_condVar.notify_all();
+    //    // std::cout << "pop finish\n";
+    //    return pop_success;
+    //}
 
     bool front(T &t)
     {
@@ -97,9 +156,12 @@ public:
 
     void set_end()
     {
-        GUARD_LOCK;
-        m_writeEnd = true;
-        m_condVar.notify_all();
+        {
+            GUARD_LOCK;
+            m_writeEnd = true;
+        }
+        m_notEmpty_condVar.notify_all();
+        m_notFull_condVar.notify_all();
     }
 
     bool is_end()
@@ -117,7 +179,11 @@ protected:
     std::list<T> m_queue;
     size_type m_maxSize;
     bool m_writeEnd;
-    std::condition_variable m_condVar;
+    // std::condition_variable m_condVar;
+
+    // 新建两个条件变量,非空和非满
+    std::condition_variable m_notEmpty_condVar;
+    std::condition_variable m_notFull_condVar;
 
 #undef GUARD_LOCK
 };
