@@ -11,6 +11,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <boost/filesystem.hpp>
 
 std::pair<int64_t, int64_t> async_read_file(const std::string &filepath, CThreadsafeQueue_ptr buff)
 {
@@ -74,7 +75,13 @@ void rpw_test()
 #endif
     std::cout << "please input data path: \n";
     std::cin >> readPath;
-    std::cout << "path: " << readPath << std::endl;
+    if (boost::filesystem::exists(boost::filesystem::path(readPath)) == false)
+    {
+        std::cout << readPath << " does not exist, exit"<<std::endl;
+        return;
+    }
+
+
     auto start = std::chrono::steady_clock::now();
 
     CThreadsafeQueue_ptr fromBuff = std::make_shared<CThreadSafeQueue<CDataPkg_ptr_t> >(10);
