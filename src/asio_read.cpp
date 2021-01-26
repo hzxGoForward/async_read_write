@@ -1,14 +1,17 @@
 ﻿#include "asio_read.h"
 #include <fstream>
 #include <iostream>
+#include <string>
 
 #ifdef WIN32
 #include <windows.h>
 #endif
 
 #ifndef WIN32
+#include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
+#define RWRWRW (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
 #endif
 
 int64_t asio_read::get_file_size()
@@ -111,7 +114,9 @@ std::pair<int64_t, int64_t> asio_read::async_write(const std::string &filepath,
     std::remove(filepath.data());
 
 #ifndef WIN32
-    int fm = open(m_file_name.data(), O_WRONLY);
+    int fm = open(filepath.data(), O_WRONLY | O_CREAT, S_IRWXG);
+    if (fm < 0)
+        throw std::runtime_error("create file " + filepath + " failed, error: " + std::to_string(errno));
     m_stream_ptr = std::make_shared<boost::asio::posix::stream_descriptor>(m_ios, fm);
 #endif
 
@@ -140,7 +145,8 @@ std::pair<int64_t, int64_t> asio_read::async_write(const std::string &filepath,
             std::shared_ptr<CDataPkg> datapkgRef = nullptr;
             if (buff->front(datapkgRef) && datapkgRef->pos == nextpos && buff->pop(datapkgRef))
             {
-                boost::asio::mutable_buffers_1 dataBuff(static_cast<void *>(datapkgRef->data.get()), datapkgRef->length);
+                boost::asio::mutable_buffers_1 dataBuff(
+                    static_cast<void *>(datapkgRef->data.get()), datapkgRef->length);
 #ifdef WIN32
                 boost::asio::async_write_at(*m_stream_ptr, m_write_size, dataBuff,
                     std::bind(&asio_read::write_handler, this, std::placeholders::_1, std::placeholders::_2));

@@ -50,7 +50,6 @@ std::pair<int64_t, int64_t> process(CThreadsafeQueue_ptr fromBuff, CThreadsafeQu
 std::pair<int64_t, int64_t> writeFile(const std::string &filepath, std::vector<CThreadsafeQueue_ptr> &vFromBuff)
 {
     auto start = std::chrono::steady_clock::now();
-    std::remove(filepath.data());
 
     asio_read af("");
     auto res = af.async_write(filepath, vFromBuff);
@@ -62,9 +61,20 @@ std::pair<int64_t, int64_t> writeFile(const std::string &filepath, std::vector<C
 
 void rpw_test()
 {
+    std::ios::sync_with_stdio(false);
     // read file
     std::string readPath = "";
+
+#ifdef WIN32
     readPath = "C:\\Users\\t4641\\Desktop\\性能测试\\recordings-overview.csv_1024.runtime";
+#endif
+
+#ifndef WIN32
+    readPath = "/home/zxhu/gitLab/dataset/testdata.manual.2009.06.14.csv";
+#endif
+    std::cout << "please input data path: \n";
+    std::cin >> readPath;
+
     CThreadsafeQueue_ptr fromBuff = std::make_shared<CThreadSafeQueue<CDataPkg_ptr_t> >(10);
     // c++ 线程对象默认使用拷贝构造函数，因此使用std::ref 和std::cref告知线程使用的是引用
     auto rf = std::async(std::launch::async, async_read_file, std::cref(readPath), fromBuff);
@@ -84,6 +94,7 @@ void rpw_test()
 
     // write file
     std::string writePath = readPath + ".copy";
+    // std::string writePath = "copy";
     auto wf = std::async(std::launch::async, writeFile, std::cref(writePath), std::ref(buffQueue));
 
 
