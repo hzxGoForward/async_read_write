@@ -5,9 +5,12 @@
 #include <cstdio>
 #include <cstdlib>
 #include <functional>
+#include <future>
 #include <iostream>
 #include <memory>
 #include <string>
+#include <thread>
+#include <vector>
 
 std::pair<int64_t, int64_t> async_read_file(const std::string &filepath, CThreadsafeQueue_ptr buff)
 {

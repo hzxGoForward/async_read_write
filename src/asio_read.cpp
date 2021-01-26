@@ -111,7 +111,7 @@ std::pair<int64_t, int64_t> asio_read::async_write(const std::string &filepath,
     std::remove(filepath.data());
 
 #ifndef WIN32
-    int fm = open(m_file_name.data(), O_WriteOnly);
+    int fm = open(m_file_name.data(), O_WRONLY);
     m_stream_ptr = std::make_shared<boost::asio::posix::stream_descriptor>(m_ios, fm);
 #endif
 

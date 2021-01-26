@@ -5,6 +5,7 @@
 
 #include <condition_variable>
 #include <functional>
+#include <iostream>
 #include <list>
 #include <memory>
 #include <mutex>
@@ -24,8 +25,7 @@ public:
     {
     }
 
-    ~CThreadSafeQueue() { std::cout << "CThreadSafeQueue deconstruct end\n";
-    }
+    ~CThreadSafeQueue() { std::cout << "CThreadSafeQueue deconstruct end\n"; }
 
     size_type size() const
     {
