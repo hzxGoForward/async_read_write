@@ -36,7 +36,7 @@ void asio_read::read_handler(const CDataPkg_ptr_t datapkg, const boost::system::
     {
         // mutable_buffer 和 boost::asio::buffer的用法造成指针分配和析构时出现异常
         CDataPkg_ptr_t datapkgRef = std::make_shared<CDataPkg>(m_pos++, 256);
-        boost::asio::mutable_buffer dataBuff(static_cast<void *>(datapkgRef->data.get()), 256);
+        boost::asio::mutable_buffers_1 dataBuff(static_cast<void *>(datapkgRef->data.get()), 256);
 #ifndef WIN32
         boost::asio::async_read(*m_stream_ptr, dataBuff,
             std::bind(&asio_read::read_handler, this, datapkgRef, std::placeholders::_1, std::placeholders::_2));
@@ -140,7 +140,7 @@ std::pair<int64_t, int64_t> asio_read::async_write(const std::string &filepath,
             std::shared_ptr<CDataPkg> datapkgRef = nullptr;
             if (buff->front(datapkgRef) && datapkgRef->pos == nextpos && buff->pop(datapkgRef))
             {
-                boost::asio::mutable_buffer dataBuff(static_cast<void *>(datapkgRef->data.get()), datapkgRef->length);
+                boost::asio::mutable_buffers_1 dataBuff(static_cast<void *>(datapkgRef->data.get()), datapkgRef->length);
 #ifdef WIN32
                 boost::asio::async_write_at(*m_stream_ptr, m_write_size, dataBuff,
                     std::bind(&asio_read::write_handler, this, std::placeholders::_1, std::placeholders::_2));
