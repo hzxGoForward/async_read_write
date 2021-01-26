@@ -33,7 +33,8 @@ void asio_read::read_handler(const CDataPkg_ptr_t datapkg, const boost::system::
         datapkg->length = read;
     }
     m_read_size += read;
-    std::cout << "read " << m_read_size << " bytes\n";
+    if (m_read_size % 1024*1000==0)
+        std::cout << "read " << m_read_size << " bytes\n";
 
     if (m_read_size < m_file_size)
     {
@@ -102,8 +103,9 @@ std::pair<int64_t, int64_t> asio_read::async_read(CThreadsafeQueue_ptr buff)
 
 void asio_read::write_handler(const boost::system::error_code &e, size_t write)
 {
-    if (write > 0)
-        std::cout << "write " << write << std::endl;
+    m_write_size += write;
+    if (m_write_size %1024*1000==0)
+        std::cout << "write " << m_write_size << std::endl;
 }
 
 
@@ -126,7 +128,7 @@ std::pair<int64_t, int64_t> asio_read::async_write(const std::string &filepath,
     m_stream_ptr = std::make_shared<boost::asio::windows::random_access_handle>(m_ios, fm);
 #endif
 
-    m_write_size = 0;
+    int64_t write_len = 0;
     int64_t nextpos = 0;
 
     size_t endCnt = 0;
@@ -148,7 +150,7 @@ std::pair<int64_t, int64_t> asio_read::async_write(const std::string &filepath,
                 boost::asio::mutable_buffers_1 dataBuff(
                     static_cast<void *>(datapkgRef->data.get()), datapkgRef->length);
 #ifdef WIN32
-                boost::asio::async_write_at(*m_stream_ptr, m_write_size, dataBuff,
+                boost::asio::async_write_at(*m_stream_ptr, write_len, dataBuff,
                     std::bind(&asio_read::write_handler, this, std::placeholders::_1, std::placeholders::_2));
 #endif
 
@@ -156,7 +158,7 @@ std::pair<int64_t, int64_t> asio_read::async_write(const std::string &filepath,
                 boost::asio::async_write(*m_stream_ptr, dataBuff,
                     std::bind(&asio_read::write_handler, this, std::placeholders::_1, std::placeholders::_2));
 #endif
-                m_write_size += datapkgRef->length;
+                write_len += datapkgRef->length;
                 ++nextpos;
             }
         }

@@ -25,7 +25,9 @@ public:
     {
     }
 
-    ~CThreadSafeQueue() { std::cout << "CThreadSafeQueue deconstruct end\n"; }
+    ~CThreadSafeQueue() { 
+        // std::cout << "CThreadSafeQueue deconstruct end\n"; 
+    }
 
     size_type size() const
     {

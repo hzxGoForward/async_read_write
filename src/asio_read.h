@@ -22,7 +22,9 @@ class asio_read
 public:
     asio_read(const std::string &file_name_) : m_file_name(file_name_), m_ios(), m_stream_ptr(nullptr) {}
     asio_read(const char *file_name_) : m_file_name(file_name_), m_ios(), m_stream_ptr(nullptr) {}
-    ~asio_read() { std::cout << "deconstruct asio_read object\n"; }
+    ~asio_read() { 
+        // std::cout << "deconstruct asio_read object\n"; 
+    }
 
 private:
     const std::string m_file_name;
