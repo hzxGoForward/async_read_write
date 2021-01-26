@@ -61,7 +61,6 @@ std::pair<int64_t, int64_t> writeFile(const std::string &filepath, std::vector<C
 
 void rpw_test()
 {
-    
     std::ios::sync_with_stdio(false);
     // read file
     std::string readPath = "";
@@ -100,13 +99,10 @@ void rpw_test()
     // std::string writePath = "copy";
     auto wf = std::async(std::launch::async, writeFile, std::cref(writePath), std::ref(buffQueue));
 
-
     // statics
-    
     // wait write finish
     auto wfRes = wf.get();
     std::cout << "--------total write " << wfRes.second << " Bytes, using " << wfRes.first << " millseconds \n";
-
 
     // wait process finish
     int64_t process_sum = 0;
@@ -122,6 +118,7 @@ void rpw_test()
     std::cout << "-----------total process  " << process_sum << " Bytes\n";
 
     auto end = std::chrono::steady_clock::now();
-    std::cout << "--------read+process+write using " << (std::chrono::duration_cast<std::chrono::milliseconds>(end - start)).count() << " millseconds"
+    std::cout << "--------read+process+write using "
+              << (std::chrono::duration_cast<std::chrono::milliseconds>(end - start)).count() << " millseconds"
               << std::endl;
 }
