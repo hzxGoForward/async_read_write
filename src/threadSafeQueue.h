@@ -24,6 +24,9 @@ public:
     {
     }
 
+    ~CThreadSafeQueue() { std::cout << "CThreadSafeQueue deconstruct end\n";
+    }
+
     size_type size() const
     {
         GUARD_LOCK;
@@ -48,24 +51,9 @@ public:
         return m_queue.size() >= m_maxSize;
     }
 
-    // bool push(const T &val)
-    //{
-    //    {
-    //        std::unique_lock<std::mutex> ul(m_queueMtx);
-    //        while (m_queue.size() >= m_maxSize)
-    //        {
-    //            m_condVar.wait(ul, [&] { return m_queue.size() < m_maxSize; });
-    //        }
-    //        m_queue.push_back(val);
-    //    }
-    //    m_condVar.notify_one();
-    //    return true;
-    //}
-
     bool push(const T &val)
     {
         bool notify_notEmpty = false;
-        std::cout << "push...\n";
         {
             std::unique_lock<std::mutex> ul(m_queueMtx);
             while (m_queue.size() >= m_maxSize)
@@ -79,7 +67,6 @@ public:
         }
         if (notify_notEmpty)
             m_notEmpty_condVar.notify_one();
-        std::cout << "push finish...\n";
         return true;
     }
 
@@ -88,7 +75,7 @@ public:
         bool pop_success = false;
         bool notify_notFull = false;
         bool notify_all = false;
-        std::cout << "pop...\n";
+        // std::cout << "pop...\n";
         {
             std::unique_lock<std::mutex> ul(m_queueMtx);
             while (m_queue.empty() && !m_writeEnd)
@@ -111,7 +98,7 @@ public:
                     notify_all = true;
             }
         }
-        std::cout << "pop...finish\n";
+        // std::cout << "pop...finish\n";
         if (notify_notFull)
             m_notFull_condVar.notify_one();
         if (notify_all)
@@ -119,34 +106,6 @@ public:
 
         return pop_success;
     }
-
-
-    // bool pop(T &val)
-    //{
-    //    bool pop_success = false;
-    //    bool notify_all = false;
-    //    // std::cout << "pop...\n";
-    //    {
-    //        std::unique_lock<std::mutex> ul(m_queueMtx);
-    //        while (m_queue.empty()&& !m_writeEnd)
-    //        {
-    //            m_condVar.wait(ul, [&]() { return !m_queue.empty() || (m_queue.empty() && m_writeEnd); });
-    //        }
-    //        if (!m_queue.empty())
-    //        {
-    //            val = m_queue.front();
-    //            m_queue.pop_front();
-    //            pop_success = true;
-    //        }
-    //        //else if (m_queue.empty() && m_writeEnd)
-    //        //    notify_all = true;
-    //    }
-    //    m_condVar.notify_one();
-    //    if (notify_all)
-    //        m_condVar.notify_all();
-    //    // std::cout << "pop finish\n";
-    //    return pop_success;
-    //}
 
     bool front(T &t)
     {
@@ -197,7 +156,8 @@ typedef std::shared_ptr<char> char_ptr_t;
 template <typename T>
 std::shared_ptr<T> make_shared_array(size_t size)
 {
-    return std::shared_ptr<T>(new T[size], std::default_delete<T[]>());
+    // return std::shared_ptr<T>(new T[size], std::default_delete<T[]>());
+    return std::shared_ptr<T>(new T[size]);
 }
 
 struct CDataPkg

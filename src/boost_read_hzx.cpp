@@ -1,77 +1,23 @@
 ﻿#include "boost_read_hzx.h"
+#include "asio_read.h"
 #include "threadSafeQueue.h"
-#include <boost/asio.hpp>
-#include <boost/asio/buffer.hpp>
-#include <boost/asio/windows/random_access_handle.hpp>
 #include <chrono>
-#include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
-#include <fstream>
 #include <functional>
 #include <iostream>
 #include <memory>
-#include <mutex>
 #include <string>
-#include <windows.h>
-
-typedef void(haldel_type)(const CDataPkg_ptr_t &datapkg, const boost::system::error_code &e, int read);
 
 std::pair<int64_t, int64_t> async_read_file(const std::string &filepath, CThreadsafeQueue_ptr buff)
 {
-    auto start = std::chrono::steady_clock::now();
-    HANDLE hfile =
-        ::CreateFile(filepath.data(), GENERIC_READ, 0, 0, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED, 0);
-    if (GetLastError() == ERROR_FILE_NOT_FOUND)
-    {
-        throw std::invalid_argument("ERROR_FILE_NOT_FOUND " + filepath);
-        return {0, 0};
-    }
-
-    boost::asio::io_context io;
-    boost::asio::windows::random_access_handle rad(io, hfile);
-
-
-    int64_t pos = 0;
-    int64_t offset = 0;
-    int64_t file_len = ::GetFileSize(hfile, nullptr);
-    const int64_t len = 512;
-    int read_len = 0;
-
-    std::function<haldel_type> handle_fun = [&](const CDataPkg_ptr_t &datapkg, const boost::system::error_code &e,
-                                                int read) -> void {
-        datapkg->ready = true;
-        datapkg->length = read;
-        buff->push(datapkg);
-        read_len += read;
-    };
-
-    try
-    {
-        while (offset < file_len)
-        {
-            CDataPkg_ptr_t datapkgRef = std::make_shared<CDataPkg>(pos++, len);
-            // buff->push(datapkgRef);
-            boost::asio::mutable_buffer dataBuff(static_cast<void *>(datapkgRef->data.get()), datapkgRef->length);
-            boost::asio::async_read_at(
-                rad, offset, dataBuff, std::bind(handle_fun, datapkgRef, std::placeholders::_1, std::placeholders::_2));
-            offset += len;
-            // boost::asio::ip::tcp::socket;
-            // boost::asio::async_read()
-        }
-    }
-    catch (...)
-    {
-        std::cout << "error" << std::endl;
-    }
-    io.run();
-
-    // write finish
+    asio_read af(filepath);
+    auto res = af.async_read(buff);
     buff->set_end();
-    auto end = std::chrono::steady_clock::now();
-    std::cout << "total read " << read_len << " Bytes " << std::endl;
-    std::cout << "file length " << file_len << " Bytes " << std::endl;
-    return {(std::chrono::duration_cast<std::chrono::milliseconds>(end - start)).count(), read_len};
+
+    std::cout << "total read " << res.second << " Bytes " << std::endl;
+    std::cout << "using " << res.first << "mill sec " << std::endl;
+    return res;
 }
 
 
@@ -102,64 +48,23 @@ std::pair<int64_t, int64_t> writeFile(const std::string &filepath, std::vector<C
 {
     auto start = std::chrono::steady_clock::now();
     std::remove(filepath.data());
-    HANDLE hfile = ::CreateFile(
-        filepath.data(), GENERIC_WRITE, 0, 0, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED, 0);
-    if (GetLastError() == ERROR_FILE_NOT_FOUND)
-    {
-        throw std::invalid_argument("ERROR_FILE_NOT_FOUND " + filepath);
-    }
 
+    asio_read af("");
+    auto res = af.async_write(filepath, vFromBuff);
 
-    boost::asio::io_context io;
-    boost::asio::windows::random_access_handle rad(io, hfile);
-    int64_t nextpos = 0;
-    int64_t write_len = 0;
-    auto handle_fun = [&](const boost::system::error_code &e, std::size_t write) -> void {
-        write_len += write;
-        if (write_len > 0 && write_len % (1024 * 100) == 0)
-            std::cout << "write len: -----" << write_len << " thread id : " << std::this_thread::get_id() << std::endl;
-    };
-
-
-    size_t endCnt = 0;
-    uint64_t offset = 0;
-    std::cout << "start writting -----" << std::endl;
-    while (endCnt != vFromBuff.size())
-    {
-        endCnt = 0;
-        for (CThreadsafeQueue_ptr buff : vFromBuff)
-        {
-            if (buff->empty())
-            {
-                if (buff->is_end())
-                    endCnt++;
-                continue;
-            }
-            std::shared_ptr<CDataPkg> datapkgRef = nullptr;
-            if (buff->front(datapkgRef) && datapkgRef->pos == nextpos && buff->pop(datapkgRef))
-            {
-                boost::asio::mutable_buffer dataBuff(static_cast<void *>(datapkgRef->data.get()), datapkgRef->length);
-                boost::asio::async_write_at(rad, offset, dataBuff, handle_fun);
-                offset += datapkgRef->length;
-                ++nextpos;
-            }
-        }
-    }
-    io.run();
-    std::cout << "write file finished, total write " << write_len << " Bytes\n";
-    auto end = std::chrono::steady_clock::now();
-    return {(std::chrono::duration_cast<std::chrono::milliseconds>(end - start)).count(), write_len};
+    std::cout << "total write " << res.second << " Bytes " << std::endl;
+    std::cout << "using " << res.first << "mill sec " << std::endl;
+    return res;
 }
 
 void rpw_test()
 {
     // read file
     std::string readPath = "";
-    readPath = "C:\\Users\\t4641\\Desktop\\性能测试\\training.processed.noemoticon.csv";
+    readPath = "C:\\Users\\t4641\\Desktop\\性能测试\\recordings-overview.csv_1024.runtime";
     CThreadsafeQueue_ptr fromBuff = std::make_shared<CThreadSafeQueue<CDataPkg_ptr_t> >(10);
     // c++ 线程对象默认使用拷贝构造函数，因此使用std::ref 和std::cref告知线程使用的是引用
     auto rf = std::async(std::launch::async, async_read_file, std::cref(readPath), fromBuff);
-
 
     // process file
     std::vector<std::future<std::pair<int64_t, int64_t> > > vf;
@@ -176,7 +81,6 @@ void rpw_test()
 
     // write file
     std::string writePath = readPath + ".copy";
-
     auto wf = std::async(std::launch::async, writeFile, std::cref(writePath), std::ref(buffQueue));
 
 
